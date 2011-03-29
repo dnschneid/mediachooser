@@ -1,0 +1,87 @@
+Simple pygtk media library browser and queuer, designed for remote controls.
+
+Background:
+ 
+I wanted a simple application that would allow me to create a quick playlist of
+files in my media directory and play them. XBMC and others are overkill, as
+mplayer works nicely and my files are already named and organized into
+directories.  It needed to be dark so that ending a movie does not blind people,
+and it needed to be quick and simple to operate with a remote control. Finally,
+it might as well perform a couple tricks to get my environment set up for
+movie-viewing, such as by setting my instant messaging program to 'busy' and
+silencing my mail program and music.
+
+Thus, I created this script.
+
+Features:
+  - Scans a media directory for files and presents the hierarchy as a tree.
+  - Allows for quick creation, playback, and destruction of a queue.
+  - Minimizes remote presses by intelligently moving the cursor at each action.
+  - Allows for environmental tweaks during launch and close, such as setting an
+    instant messaging program to 'busy'.
+  - Uses dbus for receiving remote presses, and includes a helper script that
+    lirc users can easily launch with irexec.
+  - Displays the time, so you know when to call it a night!
+
+Prerequisites:
+  - Python 2.6. Other 2.x versions should work but are untested.
+  - pygtk
+
+Recommended Prerequisites:
+  - A well-organized, centralized media directory. What you have is what you
+    see, so if your media directory is a mess, this program won't help.
+  - Takao fonts are ideal (particularly for Japanese), but pygtk will fall back
+    on whatever you have.
+  - A media player that you like.
+    Recommended: smplayer; you'll have to change the script to support other
+    players.
+  - A remote control system. The keyboard works fine (particularly if you have a
+    wireless keyboard), but this program really shines with a remote control.
+    Recommended: lirc, with a config that uses irexec to run
+    mediachooser-command with the correct command name for each button press.
+
+Setup:
+ 1. Change self.ROOT to match your media's root directory.
+ 2. Completely redo the Environment class to make the environmental
+    modifications you care about, or just replace the contents of the functions
+    with 'pass' to not do anything.
+    The current config sets Pidgin to 'busy', closes claws-mail, and throws the
+    mouse to the bottom-right part of the screen using xdotool. If you happen
+    to use the exact same setup as me, then congratulations, you don't have to
+    change anything.
+ 3. Modify Ui.on_play_clicked() to perform any final environment changes and
+    launch the media player of your choosing.
+    The current config stops MPD from playing music and launches smplayer.
+    Be sure to set whatever media player you use to quit at the end of the
+    playlist.
+ 4. Set up whatever remote system you have to call mediachooser-command at
+    appropriate times. The supported command strings (passed as a parameter to
+    mediachooser-command) are listed in the Service.commands definition in
+    Service.main
+ 5. To run, simply run mediachooser. If you run it with one or more commands as
+    parameters, it will attempt to connect to a running instance and run those
+    commands. If there is no running instance, it will just open. You can use
+    this to your advantage to always launch mediachooser with the "quit"
+    command, which will cause it to launch if it is not running and quit if it
+    already is. Tie this command to Super+Esc to have a keyboard shortcut like
+    Apple's FrontRow, or to a dedicated button on your remote control for quick
+    access.
+
+Usage:
+ (Note that keyboard keys are listed; these keys would normally be replaced by
+  calls to mediachooser-command through your remote control software)
+ 1. Up and down will scroll through the media library.
+ 2. Select will expand or collapse a directory, or add an item to the queue and
+    advance to the next item.
+ 3. Left will collapse the current directory. Convenient!
+ 4. Tab will change focus to the queue.
+ 5. Selecting a queue item will remove it from the queue.
+ 6. Tab will move to the 'play' button.
+ 7. Select will launch the media player with the specified playlist.
+    Upon exiting, the 'clear' button will be selected.
+ 8. Selecting on the 'clear' button will clear the playlist and move focus back
+    to the library.
+ 9. You can, of course, just move focus back to the library without clearing
+    anything, by pressing tab.
+
+Enjoy your custom media library browser and queuer!

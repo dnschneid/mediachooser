@@ -1,0 +1,355 @@
+#!/usr/bin/env python
+import dbus
+import dbus.service
+from dbus.mainloop.glib import DBusGMainLoop
+import gtk
+import gobject
+import os
+import subprocess
+import sys
+import time
+
+class Ui():
+    def __init__(self):
+        self.ROOT = '/share/video'
+        from pango import FontDescription
+        self.FONT = FontDescription('TakaoPGothic 36')
+        self.playlist = gtk.TreeStore(str, str)
+        self.library = gtk.TreeStore(str, str)
+        self.populate_media(self.ROOT, None)
+        self.init_ui()
+
+    def populate_media(self, directory, parent):
+        files = []
+        dirs = []
+        for item in os.listdir(directory):
+            if os.path.isfile(os.path.join(directory, item)):
+                files.append(item)
+            else:
+                dirs.append(item)
+        dirs.sort()
+        files.sort()
+        for item in dirs:
+            path = os.path.join(directory, item)
+            entry = self.library.append(parent, (item, path))
+            self.populate_media(path, entry)
+        for item in files:
+            path = os.path.join(directory, item)
+            self.library.append(parent, (os.path.splitext(item)[0], path))
+        if not files and not dirs and parent:
+            self.library.remove(parent)
+
+    def init_ui(self):
+        # Window setup
+        self.window = gtk.Window()
+        self.window.set_title('Media Chooser')
+        self.window.fullscreen()
+        self.window.connect('destroy', self.on_destroy)
+
+        # UI Elements
+        self.browser_tree = gtk.TreeView(self.library)
+        self.browser_tree.connect('row-activated', self.on_browser_select)
+        self.browser_tree.connect('focus-in-event', self.on_browser_focus)
+        self.browser_tree.connect('key-press-event', self.on_browser_key)
+
+        self.playlist_tree = gtk.TreeView(self.playlist)
+        self.playlist_tree.connect('row-activated', self.on_playlist_select)
+        self.playlist_tree.connect('focus-in-event', self.on_playlist_focus)
+
+        for tree in (self.browser_tree, self.playlist_tree):
+            tree.set_headers_visible(False)
+            col = gtk.TreeViewColumn('Media')
+            tree.append_column(col)
+            cell = gtk.CellRendererText()
+            col.pack_start(cell, True)
+            col.add_attribute(cell, 'text', 0)
+
+        browser_title = gtk.Label('Media Library')
+        playlist_title = gtk.Label('Playlist')
+        self.time = gtk.Label('')
+        self.time.set_alignment(1, 0)
+        self.time.set_single_line_mode(True)
+        self.update_time()
+
+        self.playlist_exec = gtk.Button('Play')
+        self.playlist_exec.connect('clicked', self.on_play_clicked)
+
+        self.playlist_clear = gtk.Button('Clear')
+        self.playlist_clear.connect('clicked', self.on_clear_clicked)
+
+        # Adjust properties
+        black = gtk.gdk.Color('black')
+        white = gtk.gdk.Color('white')
+        sel_color = self.window.get_style().base[gtk.STATE_SELECTED]
+
+        for button in (self.playlist_exec, self.playlist_clear):
+            button.modify_bg(gtk.STATE_ACTIVE, sel_color)
+            button.modify_fg(gtk.STATE_ACTIVE, white)
+            button.connect('focus-in-event', self.on_button_focus, sel_color)
+            button.connect('focus-out-event', self.on_button_focus, black)
+
+        for lab in (browser_title, playlist_title):
+            lab.set_alignment(0, 0)
+            lab.set_single_line_mode(True)
+
+        for obj in (self.window, self.browser_tree, self.playlist_tree,
+                    browser_title, playlist_title, self.time,
+                    self.playlist_exec, self.playlist_exec.get_children()[0],
+                    self.playlist_clear, self.playlist_clear.get_children()[0]):
+            obj.modify_base(gtk.STATE_NORMAL, black)
+            obj.modify_bg(gtk.STATE_NORMAL, black)
+            obj.modify_bg(gtk.STATE_PRELIGHT, black)
+            obj.modify_fg(gtk.STATE_NORMAL, white)
+            obj.modify_text(gtk.STATE_NORMAL, white)
+            obj.modify_fg(gtk.STATE_ACTIVE, white)
+            obj.modify_fg(gtk.STATE_PRELIGHT, white)
+            obj.modify_font(self.FONT)
+
+        # Define focus chain
+        self.focus_chain = {self.browser_tree:self.playlist_tree,
+                            self.playlist_tree:self.playlist_exec,
+                            self.playlist_exec:self.playlist_clear,
+                            self.playlist_clear:self.browser_tree}
+
+        # Layout
+        vbox_browser = gtk.VBox()
+        vbox_browser.pack_start(browser_title, expand=False)
+        vbox_browser.pack_start(self.browser_tree)
+
+        hbox_playlist_header = gtk.HBox()
+        hbox_playlist_header.pack_start(playlist_title)
+        hbox_playlist_header.pack_start(self.time)
+
+        hbox_buttons = gtk.HBox()
+        hbox_buttons.pack_start(self.playlist_exec)
+        hbox_buttons.pack_start(self.playlist_clear, expand=False)
+
+        vbox_playlist = gtk.VBox()
+        vbox_playlist.pack_start(hbox_playlist_header, expand=False)
+        vbox_playlist.pack_start(self.playlist_tree)
+        vbox_playlist.pack_start(hbox_buttons, expand=False)
+
+        hbox = gtk.HBox()
+        hbox.set_size_request(0, 0)
+        hbox.set_homogeneous(True)
+        hbox.pack_start(vbox_browser)
+        hbox.pack_start(vbox_playlist)
+
+        self.window.add(hbox)
+
+        # Display
+        self.window.show_all()
+
+    def update_time(self):
+        self.time.set_label(time.strftime('%H:%M'))
+        gobject.timeout_add(60000, self.update_time)
+
+    def on_destroy(self, widget):
+        self.quit()
+
+    def on_browser_select(self, treeview, path, column):
+        selected = self.library.get_iter(path)
+        if self.library.iter_has_child(selected):
+            if treeview.row_expanded(path):
+                treeview.collapse_row(path)
+            else:
+                treeview.expand_row(path, False)
+                self.move_down()
+        else:
+            self.playlist.append(None, self.library.get(selected, 0, 1))
+            self.move_down()
+
+    def on_playlist_select(self, treeview, path, column):
+        self.playlist.remove(self.playlist.get_iter(path))
+        if self.playlist.iter_n_children(None):
+            treeview.set_cursor(path)
+            if not treeview.get_cursor()[0]:
+                treeview.set_cursor((path[0]-1,))
+        else:
+            self.browser_tree.grab_focus()
+
+    def on_play_clicked(self, button):
+        if self.playlist.iter_n_children(None):
+            self.playlist_clear.grab_focus()
+            #stop mpd
+            subprocess.call(('. $HOME/.mpdhost; mpc -q stop',), shell=True)
+            #run smplayer
+            cmd = ['smplayer', '-close-at-end', '-fullscreen']
+            self.playlist.foreach(lambda m, p, i: cmd.append(m.get(i, 1)[0]))
+            self.dbus_toggle(False)
+            subprocess.call(cmd)
+            gobject.idle_add(self.dbus_toggle, True)
+
+    def on_clear_clicked(self, button):
+        self.playlist.clear()
+        self.browser_tree.grab_focus()
+
+    def on_button_focus(self, button, event, color):
+        button.modify_bg(gtk.STATE_NORMAL, color)
+        button.modify_bg(gtk.STATE_PRELIGHT, color)
+        if not self.playlist.iter_n_children(None):
+            self.browser_tree.grab_focus()
+
+    def on_browser_focus(self, treeview, event):
+        self.treeview_enforce_selection(treeview)
+
+    def on_playlist_focus(self, treeview, event):
+        if self.playlist.iter_n_children(None):
+            self.treeview_enforce_selection(treeview)
+        else:
+            self.browser_tree.grab_focus()
+
+    def treeview_enforce_selection(self, treeview):
+        sel = treeview.get_selection()
+        if not sel.count_selected_rows():
+            path, column = treeview.get_cursor()
+            if path is None: path = (0,)
+            sel.select_path(path)
+
+    def on_browser_key(self, treeview, event):
+        if event.keyval == gtk.keysyms.Left:
+            self.focus_prev()
+            return True
+        elif (event.keyval == gtk.keysyms.Right and
+                self.library.iter_has_child(self.library.get_iter(treeview.get_cursor()[0]))):
+            self.select()
+            return True
+        return False
+
+    def focus_next(self):
+        try:
+            self.focus_chain[self.window.get_focus()].grab_focus()
+        except:
+            self.browser_tree.grab_focus()
+
+    def focus_prev(self):
+        focus = self.window.get_focus()
+        if focus is self.browser_tree:
+            cursor = focus.get_cursor()[0]
+            if focus.row_expanded(cursor):
+                focus.collapse_row(cursor)
+            else:
+                sel = self.library.get_iter(cursor)
+                try:
+                    parent = self.library.get_path(self.library.iter_parent(sel))
+                    focus.collapse_row(parent)
+                    focus.set_cursor(parent)
+                except:
+                    focus.set_cursor((0,))
+        else:
+            reverse_chain = dict((v, k) for k, v in self.focus_chain.iteritems())
+            try:
+                reverse_chain[focus].grab_focus()
+            except:
+                self.browser_tree.grab_focus()
+
+    def move_up(self):
+        focus = self.window.get_focus()
+        if focus in (self.browser_tree, self.playlist_tree):
+            focus.emit('move-cursor', gtk.MOVEMENT_DISPLAY_LINES, -1)
+        else:
+            self.playlist_tree.grab_focus()
+
+    def move_down(self):
+        focus = self.window.get_focus()
+        if focus in (self.browser_tree, self.playlist_tree):
+            focus.emit('move-cursor', gtk.MOVEMENT_DISPLAY_LINES, 1)
+
+    def select(self):
+        focus = self.window.get_focus()
+        if focus in (self.browser_tree, self.playlist_tree):
+            path, column = focus.get_cursor()
+            focus.row_activated(path, column)
+        else:
+            focus.emit('clicked')
+
+    def play(self):
+        if self.playlist.iter_n_children(None):
+            self.on_play_clicked(self.playlist_exec)
+
+    def clear(self):
+        self.on_clear_clicked(self.playlist_clear)
+
+    def quit(self):
+        gtk.main_quit()
+
+
+BUS_NAME = 'org.dnschneid.mediachooser'
+OBJ_PATH = '/org/dnschneid/mediachooser'
+class Service(dbus.service.Object):
+    def __init__(self, argv):
+        DBusGMainLoop(set_as_default=True)
+        try:
+            service = dbus.SessionBus().get_object(BUS_NAME, OBJ_PATH)
+        except:
+            service = None
+        if service:
+            command = service.get_dbus_method('command', BUS_NAME)
+            for cmd in argv[1:]:
+                command(cmd)
+            sys.exit(0)
+        else:
+            self.ignore = False
+            bus_name = dbus.service.BusName(BUS_NAME, bus=dbus.SessionBus())
+            dbus.service.Object.__init__(self, bus_name, OBJ_PATH)
+
+    def main(self, ui):
+        self.commands = {'focus_next':ui.focus_next,
+                         'focus_prev':ui.focus_prev,
+                         'move_up':ui.move_up,
+                         'move_down':ui.move_down,
+                         'select':ui.select,
+                         'play':ui.play,
+                         'clear':ui.clear,
+                         'quit':ui.quit}
+        ui.dbus_toggle = self.dbus_toggle
+        gtk.main()
+
+    def dbus_toggle(self, enable):
+        if enable:
+            self.ignore = False
+        else:
+            self.ignore = True
+
+    @dbus.service.method(BUS_NAME)
+    def command(self, cmd):
+        if not self.ignore:
+            if cmd in self.commands:
+                self.commands[cmd]()
+
+class Environment:
+    def __init__(self):
+        # Move the mouse to get it out of the way and ensure the right full screen
+        subprocess.call(('xdotool', 'mousemove', '10000', '10000'))
+        # Turn off pidgin
+        self.purple_obj = None
+        try:
+            self.purple_obj = dbus.SessionBus().get_object('im.pidgin.purple.PurpleService', '/im/pidgin/purple/PurpleObject')
+            self.purple_int = dbus.Interface(self.purple_obj, "im.pidgin.purple.PurpleInterface")
+            if self.purple_int.PurpleSavedstatusGetType(
+                    self.purple_int.PurpleSavedstatusGetCurrent()) == 2:
+                saved = self.purple_int.PurpleSavedstatusNew("", self.purple_int.PurplePrimitiveGetTypeFromId('unavailable'))
+                self.purple_int.PurpleSavedstatusActivate(saved)
+            else:
+                self.purple_int = None
+        except:
+            self.purple_int = None
+        # Turn off claws-mail
+        subprocess.call(('claws-mail --quit >/dev/null 2>/dev/null'), shell=True)
+
+    def reset(self):
+        # Reactivate pidgin if necessary
+        if self.purple_int:
+            saved = self.purple_int.PurpleSavedstatusNew("", self.purple_int.PurplePrimitiveGetTypeFromId('available'))
+            self.purple_int.PurpleSavedstatusActivate(saved)
+        # Reactivate claws-mail
+        subprocess.Popen(('claws-mail >/dev/null 2>/dev/null &'), shell=True)
+
+if __name__ == "__main__":
+    service = Service(sys.argv)
+    environment = Environment()
+    try:
+        service.main(Ui())
+    except:
+        pass
+    environment.reset()
