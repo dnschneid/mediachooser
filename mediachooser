@@ -211,7 +211,8 @@ class Ui():
             self.focus_prev()
             return True
         elif (event.keyval == gtk.keysyms.Right and
-                self.library.iter_has_child(self.library.get_iter(treeview.get_cursor()[0]))):
+                self.library.iter_has_child(
+                    self.library.get_iter(treeview.get_cursor()[0]))):
             self.select()
             return True
         return False
@@ -231,13 +232,15 @@ class Ui():
             else:
                 sel = self.library.get_iter(cursor)
                 try:
-                    parent = self.library.get_path(self.library.iter_parent(sel))
+                    parent = self.library.get_path(
+                            self.library.iter_parent(sel))
                     focus.collapse_row(parent)
                     focus.set_cursor(parent)
                 except:
                     focus.set_cursor((0,))
         else:
-            reverse_chain = dict((v, k) for k, v in self.focus_chain.iteritems())
+            reverse_chain = dict((v, k) for k, v in
+                    self.focus_chain.iteritems())
             try:
                 reverse_chain[focus].grab_focus()
             except:
@@ -319,28 +322,36 @@ class Service(dbus.service.Object):
 
 class Environment:
     def __init__(self):
-        # Move the mouse to get it out of the way and ensure the right full screen
+        # Move the mouse to get it out of the way and ensure the right full
+        # screen
         subprocess.call(('xdotool', 'mousemove', '10000', '10000'))
         # Turn off pidgin
         self.purple_obj = None
         try:
-            self.purple_obj = dbus.SessionBus().get_object('im.pidgin.purple.PurpleService', '/im/pidgin/purple/PurpleObject')
-            self.purple_int = dbus.Interface(self.purple_obj, "im.pidgin.purple.PurpleInterface")
+            self.purple_obj = dbus.SessionBus().get_object(
+                    'im.pidgin.purple.PurpleService',
+                    '/im/pidgin/purple/PurpleObject')
+            self.purple_int = dbus.Interface(self.purple_obj,
+                    'im.pidgin.purple.PurpleInterface')
             if self.purple_int.PurpleSavedstatusGetType(
                     self.purple_int.PurpleSavedstatusGetCurrent()) == 2:
-                saved = self.purple_int.PurpleSavedstatusNew("", self.purple_int.PurplePrimitiveGetTypeFromId('unavailable'))
+                saved = self.purple_int.PurpleSavedstatusNew('',
+                        self.purple_int.PurplePrimitiveGetTypeFromId(
+                            'unavailable'))
                 self.purple_int.PurpleSavedstatusActivate(saved)
             else:
                 self.purple_int = None
         except:
             self.purple_int = None
         # Turn off claws-mail
-        subprocess.call(('claws-mail --quit >/dev/null 2>/dev/null'), shell=True)
+        subprocess.call(('claws-mail --quit >/dev/null 2>/dev/null'),
+                        shell=True)
 
     def reset(self):
         # Reactivate pidgin if necessary
         if self.purple_int:
-            saved = self.purple_int.PurpleSavedstatusNew("", self.purple_int.PurplePrimitiveGetTypeFromId('available'))
+            saved = self.purple_int.PurpleSavedstatusNew('',
+                    self.purple_int.PurplePrimitiveGetTypeFromId('available'))
             self.purple_int.PurpleSavedstatusActivate(saved)
         # Reactivate claws-mail
         subprocess.Popen(('claws-mail >/dev/null 2>/dev/null &'), shell=True)
