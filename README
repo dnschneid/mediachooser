@@ -65,7 +65,8 @@ Setup:
     command, which will cause it to launch if it is not running and quit if it
     already is. Tie this command to Super+Esc to have a keyboard shortcut like
     Apple's FrontRow, or to a dedicated button on your remote control for quick
-    access.
+    access. You can also run with a --noenv parameter to disable environmental
+    tweaks such as disabling e-mail notifications and whatnot.
 
 Usage:
  (Note that keyboard keys are listed; these keys would normally be replaced by

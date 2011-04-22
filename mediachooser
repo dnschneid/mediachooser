@@ -358,9 +358,13 @@ class Environment:
 
 if __name__ == "__main__":
     service = Service(sys.argv)
-    environment = Environment()
+    if not '--noenv' in sys.argv[1:]:
+        environment = Environment()
+    else:
+        environment = None
     try:
         service.main(Ui())
     except:
         pass
-    environment.reset()
+    if environment:
+        environment.reset()
