@@ -1,9 +1,11 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import dbus
 import dbus.service
 from dbus.mainloop.glib import DBusGMainLoop
-import gtk
-import gobject
+from gi.repository import Gtk
+from gi.repository import Gdk
+from gi.repository import GObject
+from gi.repository.Pango import FontDescription
 import os
 import subprocess
 import sys
@@ -12,10 +14,9 @@ import time
 class Ui():
     def __init__(self):
         self.ROOT = '/share/video'
-        from pango import FontDescription
-        self.FONT = FontDescription('TakaoPGothic 36')
-        self.playlist = gtk.TreeStore(str, str)
-        self.library = gtk.TreeStore(str, str)
+        self.FONT = FontDescription('TakaoPGothic 28')
+        self.playlist = Gtk.TreeStore(str, str)
+        self.library = Gtk.TreeStore(str, str)
         self.populate_media(self.ROOT, None)
         self.init_ui()
 
@@ -41,50 +42,62 @@ class Ui():
 
     def init_ui(self):
         # Window setup
-        self.window = gtk.Window()
+        self.window = Gtk.Window()
         self.window.set_title('Media Chooser')
         self.window.fullscreen()
         self.window.connect('destroy', self.on_destroy)
 
+        hbox = Gtk.HPaned()
+
         # UI Elements
-        self.browser_tree = gtk.TreeView(self.library)
+        self.browser_tree = Gtk.TreeView(self.library)
         self.browser_tree.connect('row-activated', self.on_browser_select)
         self.browser_tree.connect('focus-in-event', self.on_browser_focus)
         self.browser_tree.connect('key-press-event', self.on_browser_key)
 
-        self.playlist_tree = gtk.TreeView(self.playlist)
+        self.playlist_tree = Gtk.TreeView(self.playlist)
         self.playlist_tree.connect('row-activated', self.on_playlist_select)
         self.playlist_tree.connect('focus-in-event', self.on_playlist_focus)
 
         for tree in (self.browser_tree, self.playlist_tree):
             tree.set_headers_visible(False)
-            col = gtk.TreeViewColumn('Media')
+            col = Gtk.TreeViewColumn('Media')
             tree.append_column(col)
-            cell = gtk.CellRendererText()
+            cell = Gtk.CellRendererText()
             col.pack_start(cell, True)
             col.add_attribute(cell, 'text', 0)
 
-        browser_title = gtk.Label('Media Library')
-        playlist_title = gtk.Label('Playlist')
-        self.time = gtk.Label('')
+        browser_scroll = Gtk.ScrolledWindow()
+        browser_scroll.add(self.browser_tree)
+        browser_scroll.get_vscrollbar().set_child_visible(False)
+        browser_scroll.get_hscrollbar().set_child_visible(False)
+
+        playlist_scroll = Gtk.ScrolledWindow()
+        playlist_scroll.add(self.playlist_tree)
+        playlist_scroll.get_vscrollbar().set_child_visible(False)
+        playlist_scroll.get_hscrollbar().set_child_visible(False)
+
+        browser_title = Gtk.Label(label='Media Library')
+        playlist_title = Gtk.Label(label='Playlist')
+        self.time = Gtk.Label(label='')
         self.time.set_alignment(1, 0)
         self.time.set_single_line_mode(True)
         self.update_time()
 
-        self.playlist_exec = gtk.Button('Play')
+        self.playlist_exec = Gtk.Button('Play')
         self.playlist_exec.connect('clicked', self.on_play_clicked)
 
-        self.playlist_clear = gtk.Button('Clear')
+        self.playlist_clear = Gtk.Button('Clear')
         self.playlist_clear.connect('clicked', self.on_clear_clicked)
 
         # Adjust properties
-        black = gtk.gdk.Color('black')
-        white = gtk.gdk.Color('white')
-        sel_color = self.window.get_style().base[gtk.STATE_SELECTED]
+        black = Gdk.Color(0, 0, 0)
+        white = Gdk.Color(65535, 65535, 65535)
+        sel_color = self.window.get_style().base[Gtk.StateType.SELECTED]
 
         for button in (self.playlist_exec, self.playlist_clear):
-            button.modify_bg(gtk.STATE_ACTIVE, sel_color)
-            button.modify_fg(gtk.STATE_ACTIVE, white)
+            button.modify_bg(Gtk.StateType.ACTIVE, sel_color)
+            button.modify_fg(Gtk.StateType.ACTIVE, white)
             button.connect('focus-in-event', self.on_button_focus, sel_color)
             button.connect('focus-out-event', self.on_button_focus, black)
 
@@ -92,17 +105,28 @@ class Ui():
             lab.set_alignment(0, 0)
             lab.set_single_line_mode(True)
 
+        # Make buttons black and scrollbars narrow (we hide them anyway)
+        css = bytes("""GtkButton { background:#000000; border:#000000; }
+                       GtkScrollbar { -GtkRange-slider-width:0px; }""", 'ascii')
+        css_provider = Gtk.CssProvider()
+        css_provider.load_from_data(css)
+        Gtk.StyleContext().add_provider_for_screen(
+                Gdk.Display.get_default().get_default_screen(),
+                css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+        # Make everything the correct colors
         for obj in (self.window, self.browser_tree, self.playlist_tree,
-                    browser_title, playlist_title, self.time,
+                    browser_scroll, browser_title, playlist_scroll,
+                    playlist_title, self.time, hbox,
                     self.playlist_exec, self.playlist_exec.get_children()[0],
                     self.playlist_clear, self.playlist_clear.get_children()[0]):
-            obj.modify_base(gtk.STATE_NORMAL, black)
-            obj.modify_bg(gtk.STATE_NORMAL, black)
-            obj.modify_bg(gtk.STATE_PRELIGHT, black)
-            obj.modify_fg(gtk.STATE_NORMAL, white)
-            obj.modify_text(gtk.STATE_NORMAL, white)
-            obj.modify_fg(gtk.STATE_ACTIVE, white)
-            obj.modify_fg(gtk.STATE_PRELIGHT, white)
+            obj.modify_base(Gtk.StateType.NORMAL, black)
+            obj.modify_bg(Gtk.StateType.NORMAL, black)
+            obj.modify_bg(Gtk.StateType.PRELIGHT, black)
+            obj.modify_fg(Gtk.StateType.NORMAL, white)
+            obj.modify_text(Gtk.StateType.NORMAL, white)
+            obj.modify_fg(Gtk.StateType.ACTIVE, white)
+            obj.modify_fg(Gtk.StateType.PRELIGHT, white)
             obj.modify_font(self.FONT)
 
         # Define focus chain
@@ -112,28 +136,26 @@ class Ui():
                             self.playlist_clear:self.browser_tree}
 
         # Layout
-        vbox_browser = gtk.VBox()
-        vbox_browser.pack_start(browser_title, expand=False)
-        vbox_browser.pack_start(self.browser_tree)
+        vbox_browser = Gtk.VBox()
+        vbox_browser.pack_start(browser_title, False, True, 0)
+        vbox_browser.pack_start(browser_scroll, True, True, 0)
 
-        hbox_playlist_header = gtk.HBox()
-        hbox_playlist_header.pack_start(playlist_title)
-        hbox_playlist_header.pack_start(self.time)
+        hbox_playlist_header = Gtk.HBox()
+        hbox_playlist_header.pack_start(playlist_title, True, True, 0)
+        hbox_playlist_header.pack_start(self.time, True, True, 0)
 
-        hbox_buttons = gtk.HBox()
-        hbox_buttons.pack_start(self.playlist_exec)
-        hbox_buttons.pack_start(self.playlist_clear, expand=False)
+        hbox_buttons = Gtk.HBox()
+        hbox_buttons.pack_start(self.playlist_exec, True, True, 0)
+        hbox_buttons.pack_start(self.playlist_clear, False, True, 0)
 
-        vbox_playlist = gtk.VBox()
-        vbox_playlist.pack_start(hbox_playlist_header, expand=False)
-        vbox_playlist.pack_start(self.playlist_tree)
-        vbox_playlist.pack_start(hbox_buttons, expand=False)
+        vbox_playlist = Gtk.VBox()
+        vbox_playlist.pack_start(hbox_playlist_header, False, True, 0)
+        vbox_playlist.pack_start(playlist_scroll, True, True, 0)
+        vbox_playlist.pack_start(hbox_buttons, False, True, 0)
 
-        hbox = gtk.HBox()
         hbox.set_size_request(0, 0)
-        hbox.set_homogeneous(True)
-        hbox.pack_start(vbox_browser)
-        hbox.pack_start(vbox_playlist)
+        hbox.pack1(vbox_browser, True, True)
+        hbox.pack2(vbox_playlist, True, True)
 
         self.window.add(hbox)
 
@@ -142,7 +164,7 @@ class Ui():
 
     def update_time(self):
         self.time.set_label(time.strftime('%H:%M'))
-        gobject.timeout_add(60000, self.update_time)
+        GObject.timeout_add(60000, self.update_time)
 
     def on_destroy(self, widget):
         self.quit()
@@ -175,18 +197,19 @@ class Ui():
             subprocess.call(('. $HOME/.mpdhost; mpc -q stop',), shell=True)
             #run smplayer
             cmd = ['smplayer', '-close-at-end', '-fullscreen']
-            self.playlist.foreach(lambda m, p, i: cmd.append(m.get(i, 1)[0]))
+            self.playlist.foreach(lambda m, p, i, d: cmd.append(m.get(i, 1)[0]),
+                                  None)
             self.dbus_toggle(False)
             subprocess.call(cmd)
-            gobject.idle_add(self.dbus_toggle, True)
+            GObject.idle_add(self.dbus_toggle, True)
 
     def on_clear_clicked(self, button):
         self.playlist.clear()
         self.browser_tree.grab_focus()
 
     def on_button_focus(self, button, event, color):
-        button.modify_bg(gtk.STATE_NORMAL, color)
-        button.modify_bg(gtk.STATE_PRELIGHT, color)
+        button.modify_bg(Gtk.StateType.NORMAL, color)
+        button.modify_bg(Gtk.StateType.PRELIGHT, color)
         if not self.playlist.iter_n_children(None):
             self.browser_tree.grab_focus()
 
@@ -207,10 +230,10 @@ class Ui():
             sel.select_path(path)
 
     def on_browser_key(self, treeview, event):
-        if event.keyval == gtk.keysyms.Left:
+        if event.keyval == Gdk.KEY_Left:
             self.focus_prev()
             return True
-        elif (event.keyval == gtk.keysyms.Right and
+        elif (event.keyval == Gdk.KEY_Right and
                 self.library.iter_has_child(
                     self.library.get_iter(treeview.get_cursor()[0]))):
             self.select()
@@ -249,14 +272,14 @@ class Ui():
     def move_up(self):
         focus = self.window.get_focus()
         if focus in (self.browser_tree, self.playlist_tree):
-            focus.emit('move-cursor', gtk.MOVEMENT_DISPLAY_LINES, -1)
+            focus.emit('move-cursor', Gtk.MovementStep.DISPLAY_LINES, -1)
         else:
             self.playlist_tree.grab_focus()
 
     def move_down(self):
         focus = self.window.get_focus()
         if focus in (self.browser_tree, self.playlist_tree):
-            focus.emit('move-cursor', gtk.MOVEMENT_DISPLAY_LINES, 1)
+            focus.emit('move-cursor', Gtk.MovementStep.DISPLAY_LINES, 1)
 
     def select(self):
         focus = self.window.get_focus()
@@ -274,7 +297,7 @@ class Ui():
         self.on_clear_clicked(self.playlist_clear)
 
     def quit(self):
-        gtk.main_quit()
+        Gtk.main_quit()
 
 
 BUS_NAME = 'org.dnschneid.mediachooser'
@@ -306,7 +329,7 @@ class Service(dbus.service.Object):
                          'clear':ui.clear,
                          'quit':ui.quit}
         ui.dbus_toggle = self.dbus_toggle
-        gtk.main()
+        Gtk.main()
 
     def dbus_toggle(self, enable):
         if enable:
@@ -322,9 +345,8 @@ class Service(dbus.service.Object):
 
 class Environment:
     def __init__(self):
-        # Move the mouse to get it out of the way and ensure the right full
-        # screen
-        subprocess.call(('xdotool', 'mousemove', '10000', '10000'))
+        # Move the mouse to get it out of the way and ensure the correct screen
+        subprocess.call(('xdotool', 'mousemove', '0', '10000'))
         # Turn off pidgin
         self.purple_obj = None
         try:
