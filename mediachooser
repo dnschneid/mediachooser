@@ -13,7 +13,7 @@ import time
 
 class Ui():
     def __init__(self):
-        self.ROOT = '/share/video'
+        self.ROOT = os.path.expanduser('~/Videos')
         self.FONT = FontDescription('TakaoPGothic 28')
         self.playlist = Gtk.TreeStore(str, str)
         self.library = Gtk.TreeStore(str, str)
@@ -386,7 +386,6 @@ if __name__ == "__main__":
         environment = None
     try:
         service.main(Ui())
-    except:
-        pass
-    if environment:
-        environment.reset()
+    finally:
+        if environment:
+            environment.reset()
