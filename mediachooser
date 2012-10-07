@@ -93,7 +93,7 @@ class Ui():
         # Adjust properties
         black = Gdk.Color(0, 0, 0)
         white = Gdk.Color(65535, 65535, 65535)
-        sel_color = self.window.get_style().base[Gtk.StateType.SELECTED]
+        sel_color = Gdk.Color(50000, 50000, 65535)
 
         for button in (self.playlist_exec, self.playlist_clear):
             button.modify_bg(Gtk.StateType.ACTIVE, sel_color)
