@@ -46,6 +46,8 @@ class Ui():
         self.window.set_title('Media Chooser')
         self.window.fullscreen()
         self.window.connect('destroy', self.on_destroy)
+        self.window.connect('focus-in-event', self.on_focus)
+        self.window.add_events(Gdk.EventMask.FOCUS_CHANGE_MASK)
 
         hbox = Gtk.HPaned()
 
@@ -162,6 +164,15 @@ class Ui():
         # Display
         self.window.show_all()
 
+    def move_mouse(self):
+        # Move the mouse to the bottom-right corner of the window
+        x, y = self.window.get_position()
+        w, h = self.window.get_size()
+        subprocess.call(('xdotool', 'mousemove', '%i'%(x+w-2), '%i'%(y+h-2)))
+
+    def on_focus(self, widget, event):
+        self.move_mouse()
+
     def update_time(self):
         self.time.set_label(time.strftime('%H:%M'))
         GObject.timeout_add(60000, self.update_time)
@@ -193,6 +204,8 @@ class Ui():
     def on_play_clicked(self, button):
         if self.playlist.iter_n_children(None):
             self.playlist_clear.grab_focus()
+            #move mouse
+            self.move_mouse()
             #stop mpd
             subprocess.call(('. $HOME/.mpdhost; mpc -q stop',), shell=True)
             #run smplayer
@@ -345,8 +358,6 @@ class Service(dbus.service.Object):
 
 class Environment:
     def __init__(self):
-        # Move the mouse to get it out of the way and ensure the correct screen
-        subprocess.call(('xdotool', 'mousemove', '0', '10000'))
         # Turn off pidgin
         self.purple_obj = None
         try:
