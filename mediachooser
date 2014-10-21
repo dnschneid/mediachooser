@@ -11,6 +11,8 @@ import subprocess
 import sys
 import time
 
+DESKTOP_SIZE = (1920, 3184)
+
 class Ui():
     def __init__(self):
         self.ROOT = os.path.expanduser('~/Videos')
@@ -41,9 +43,22 @@ class Ui():
             self.library.remove(parent)
 
     def init_ui(self):
+        if '--theatre' in sys.argv[1:] or '--theater' in sys.argv[1:]:
+            # Background setup
+            self.background = Gtk.Window()
+            self.background.set_title('Media Chooser Blanker')
+            self.background.set_decorated(False)
+            self.background.set_size_request(DESKTOP_SIZE[0], DESKTOP_SIZE[1])
+            self.background.set_keep_above(True)
+            self.background.connect('focus-in-event', self.on_background_focus)
+            self.background.add_events(Gdk.EventMask.FOCUS_CHANGE_MASK)
+        else:
+            self.background = None
+
         # Window setup
         self.window = Gtk.Window()
         self.window.set_title('Media Chooser')
+        self.window.set_keep_above(True)
         self.window.fullscreen()
         self.window.connect('destroy', self.on_destroy)
         self.window.connect('focus-in-event', self.on_focus)
@@ -119,9 +134,11 @@ class Ui():
         # Make everything the correct colors
         for obj in (self.window, self.browser_tree, self.playlist_tree,
                     browser_scroll, browser_title, playlist_scroll,
-                    playlist_title, self.time, hbox,
+                    playlist_title, self.time, hbox, self.background,
                     self.playlist_exec, self.playlist_exec.get_children()[0],
                     self.playlist_clear, self.playlist_clear.get_children()[0]):
+            if not obj:
+                continue
             obj.modify_base(Gtk.StateType.NORMAL, black)
             obj.modify_bg(Gtk.StateType.NORMAL, black)
             obj.modify_bg(Gtk.StateType.PRELIGHT, black)
@@ -162,6 +179,8 @@ class Ui():
         self.window.add(hbox)
 
         # Display
+        if self.background:
+            self.background.show_all()
         self.window.show_all()
 
     def move_mouse(self):
@@ -170,7 +189,12 @@ class Ui():
         w, h = self.window.get_size()
         subprocess.call(('xdotool', 'mousemove', '%i'%(x+w-2), '%i'%(y+h-2)))
 
+    def on_background_focus(self, widget, event):
+        self.window.present()
+
     def on_focus(self, widget, event):
+        if self.background:
+            self.background.move(0, 0)
         self.move_mouse()
 
     def update_time(self):
@@ -395,6 +419,8 @@ if __name__ == "__main__":
         environment = Environment()
     else:
         environment = None
+    if '--theatre' in sys.argv[1:] or '--theater' in sys.argv[1:]:
+        subprocess.call(('xdotool', 'mousemove', DESKTOP_SIZE[0], DESKTOP_SIZE[1]))
     try:
         service.main(Ui())
     finally:
