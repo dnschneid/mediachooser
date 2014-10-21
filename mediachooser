@@ -420,7 +420,8 @@ if __name__ == "__main__":
     else:
         environment = None
     if '--theatre' in sys.argv[1:] or '--theater' in sys.argv[1:]:
-        subprocess.call(('xdotool', 'mousemove', DESKTOP_SIZE[0], DESKTOP_SIZE[1]))
+        subprocess.call(('xdotool', 'mousemove',
+                         str(DESKTOP_SIZE[0]), str(DESKTOP_SIZE[1])))
     try:
         service.main(Ui())
     finally:
